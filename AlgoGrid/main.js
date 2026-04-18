@@ -7,6 +7,7 @@ import { Grid } from './src/core/grid.js';
 import { CanvasRenderer } from './src/ui/canvas-renderer.js';
 import { Controls } from './src/ui/controls.js';
 import { StatsPanel } from './src/ui/stats-panel.js';
+import { StepController } from './src/ui/step-controller.js';
 
 /**
  * Главный класс приложения AlgoGrid.
@@ -27,6 +28,9 @@ class AlgoGridApp {
         
         /** @type {StatsPanel|null} - Экземпляр панели статистики */
         this.statsPanel = null;
+        
+        /** @type {StepController|null} - Контроллер выполнения алгоритма */
+        this.stepController = null;
         
         /** @type {boolean} - Флаг инициализации */
         this.isInitialized = false;
@@ -77,9 +81,19 @@ class AlgoGridApp {
         this.statsPanel = new StatsPanel();
         console.log('AlgoGridApp: StatsPanel created');
         
-        // Создаем контроллер управления
-        this.controls = new Controls(this.grid, this.renderer);
+        // Создаем контроллер выполнения алгоритма
+        this.stepController = new StepController();
+        console.log('AlgoGridApp: StepController created');
+        
+        // Создаем контроллер управления, передавая stepController
+        this.controls = new Controls(this.grid, this.renderer, this.stepController);
         console.log('AlgoGridApp: Controls created');
+        
+        // Настраиваем callbacks для кнопок
+        this.setupControlCallbacks();
+        
+        // Подписываемся на события StepController
+        this.setupStepControllerEvents();
         
         // Настраиваем обработчики мыши
         this.setupMouseHandlers(canvas);
@@ -95,6 +109,72 @@ class AlgoGridApp {
         
         this.isInitialized = true;
         console.log('AlgoGridApp: Initialization complete');
+    }
+
+    /**
+     * Настраивает обработчики событий StepController.
+     */
+    setupStepControllerEvents() {
+        console.log('AlgoGridApp: Setting up StepController events');
+        
+        if (!this.stepController) return;
+        
+        // Обработчик шага алгоритма
+        this.stepController.addEventListener('algo:step', (event) => {
+            console.log('AlgoGridApp: algo:step event', event.detail);
+            
+            // Обновляем статистику
+            if (this.statsPanel) {
+                this.statsPanel.setVisitedCount(event.detail.visitedCount);
+                this.statsPanel.setExecutionTime(event.detail.time);
+            }
+            
+            // Перерисовываем сетку
+            if (this.renderer) {
+                this.renderer.render();
+            }
+        });
+        
+        // Обработчик завершения алгоритма
+        this.stepController.addEventListener('algo:complete', (event) => {
+            console.log('AlgoGridApp: algo:complete event', event.detail);
+            
+            // Обновляем статистику
+            if (this.statsPanel) {
+                this.statsPanel.setVisitedCount(event.detail.visitedCount);
+                this.statsPanel.setExecutionTime(event.detail.time);
+                this.statsPanel.setPathLength(event.detail.path ? event.detail.path.length : 0);
+                this.statsPanel.setStatus('completed');
+            }
+            
+            // Подсвечиваем путь
+            if (this.renderer && event.detail.path) {
+                this.renderer.highlightPath(event.detail.path);
+            }
+        });
+        
+        // Обработчик ошибки
+        this.stepController.addEventListener('algo:error', (event) => {
+            console.error('AlgoGridApp: algo:error event', event.detail);
+            
+            if (this.statsPanel) {
+                this.statsPanel.setStatus('error');
+            }
+        });
+    }
+
+    /**
+     * Настраивает callbacks для кнопок управления.
+     */
+    setupControlCallbacks() {
+        console.log('AlgoGridApp: Setting up control callbacks');
+        
+        if (!this.controls) return;
+        
+        this.controls.setOnPlay(() => this.play());
+        this.controls.setOnPause(() => this.pause());
+        this.controls.setOnStep(() => this.step());
+        this.controls.setOnReset(() => this.reset());
     }
 
     /**
@@ -189,10 +269,170 @@ class AlgoGridApp {
         console.log('AlgoGridApp: Play called');
         if (!this.isInitialized) return;
         
-        // Заглушка для будущей реализации
+        // Проверяем наличие start и end точек
+        if (!this.grid || !this.grid.startCell || !this.grid.endCell) {
+            console.warn('AlgoGridApp: Start or End point not set');
+            if (this.statsPanel) {
+                this.statsPanel.setStatus('error');
+            }
+            return;
+        }
+        
+        // Создаем генератор алгоритма на основе выбранного
+        const algorithm = this.controls ? this.controls.getAlgorithm() : 'bfs';
+        const generatorFactory = this.getAlgorithmGenerator(algorithm);
+        
+        if (!generatorFactory) {
+            console.warn('AlgoGridApp: Unknown algorithm', algorithm);
+            return;
+        }
+        
+        // Сбрасываем сетку перед запуском
+        this.grid.reset();
+        
+        // Обновляем статистику
         if (this.statsPanel) {
+            this.statsPanel.reset();
             this.statsPanel.setStatus('running');
         }
+        
+        // Запускаем контроллер
+        if (this.stepController) {
+            this.stepController.start(generatorFactory);
+        }
+    }
+
+    /**
+     * Получает фабрику генератора для указанного алгоритма.
+     * @param {string} algorithm - Название алгоритма.
+     * @returns {Function|null} Функция-генератор или null.
+     */
+    getAlgorithmGenerator(algorithm) {
+        if (!this.grid) return null;
+        
+        switch (algorithm) {
+            case 'bfs':
+                return () => this.bfsGenerator();
+            case 'dfs':
+                return () => this.dfsGenerator();
+            default:
+                // По умолчанию используем BFS
+                return () => this.bfsGenerator();
+        }
+    }
+
+    /**
+     * Генератор алгоритма BFS.
+     * @yields {{type: string, cell?: Cell, path?: Cell[]}}
+     */
+    *bfsGenerator() {
+        const queue = [];
+        const visited = new Set();
+        
+        if (!this.grid.startCell || !this.grid.endCell) {
+            yield { type: 'error', msg: 'Start or End point not set' };
+            return;
+        }
+        
+        queue.push(this.grid.startCell);
+        visited.add(`${this.grid.startCell.x},${this.grid.startCell.y}`);
+        
+        while (queue.length > 0) {
+            const current = queue.shift();
+            
+            // Yield visit action
+            yield { type: 'visit', cell: current };
+            
+            // Проверяем, достигли ли мы конца
+            if (current === this.grid.endCell) {
+                // Восстанавливаем путь
+                const path = this.reconstructPath(current);
+                yield { type: 'complete', path };
+                return;
+            }
+            
+            // Добавляем соседей
+            const neighbors = this.grid.getNeighbors(current);
+            for (const neighbor of neighbors) {
+                const key = `${neighbor.x},${neighbor.y}`;
+                if (!visited.has(key)) {
+                    visited.add(key);
+                    neighbor.parent = current;
+                    queue.push(neighbor);
+                }
+            }
+        }
+        
+        // Путь не найден
+        yield { type: 'complete', path: [] };
+    }
+
+    /**
+     * Генератор алгоритма DFS.
+     * @yields {{type: string, cell?: Cell, path?: Cell[]}}
+     */
+    *dfsGenerator() {
+        const stack = [];
+        const visited = new Set();
+        
+        if (!this.grid.startCell || !this.grid.endCell) {
+            yield { type: 'error', msg: 'Start or End point not set' };
+            return;
+        }
+        
+        stack.push(this.grid.startCell);
+        
+        while (stack.length > 0) {
+            const current = stack.pop();
+            const key = `${current.x},${current.y}`;
+            
+            if (visited.has(key)) {
+                continue;
+            }
+            
+            visited.add(key);
+            
+            // Yield visit action
+            yield { type: 'visit', cell: current };
+            
+            // Проверяем, достигли ли мы конца
+            if (current === this.grid.endCell) {
+                // Восстанавливаем путь
+                const path = this.reconstructPath(current);
+                yield { type: 'complete', path };
+                return;
+            }
+            
+            // Добавляем соседей
+            const neighbors = this.grid.getNeighbors(current);
+            for (const neighbor of neighbors) {
+                const nKey = `${neighbor.x},${neighbor.y}`;
+                if (!visited.has(nKey)) {
+                    neighbor.parent = current;
+                    stack.push(neighbor);
+                }
+            }
+        }
+        
+        // Путь не найден
+        yield { type: 'complete', path: [] };
+    }
+
+    /**
+     * Восстанавливает путь от конечной точки к начальной.
+     * @param {Cell} endCell - Конечная ячейка.
+     * @returns {Cell[]} Массив ячеек пути.
+     */
+    reconstructPath(endCell) {
+        const path = [];
+        let current = endCell;
+        
+        while (current) {
+            path.unshift(current);
+            current = current.parent;
+        }
+        
+        return path;
     }
 
     /**
@@ -202,8 +442,11 @@ class AlgoGridApp {
         console.log('AlgoGridApp: Pause called');
         if (!this.isInitialized) return;
         
-        // Заглушка для будущей реализации
-        if (this.statsPanel) {
+        if (this.stepController) {
+            this.stepController.pause();
+        }
+        
+        if (this.statsPanel && !this.stepController?.isRunning()) {
             this.statsPanel.setStatus('paused');
         }
     }
@@ -215,7 +458,42 @@ class AlgoGridApp {
         console.log('AlgoGridApp: Step called');
         if (!this.isInitialized) return;
         
-        // Заглушка для будущей реализации
+        // Если не запущен и не на паузе, запускаем новый алгоритм
+        if (!this.stepController || (!this.stepController.isRunning() && !this.stepController.paused)) {
+            // Проверяем наличие start и end точек
+            if (!this.grid || !this.grid.startCell || !this.grid.endCell) {
+                console.warn('AlgoGridApp: Start or End point not set');
+                return;
+            }
+            
+            const algorithm = this.controls ? this.controls.getAlgorithm() : 'bfs';
+            const generatorFactory = this.getAlgorithmGenerator(algorithm);
+            
+            if (!generatorFactory) {
+                console.warn('AlgoGridApp: Unknown algorithm', algorithm);
+                return;
+            }
+            
+            // Сбрасываем сетку перед запуском
+            this.grid.reset();
+            
+            // Обновляем статистику
+            if (this.statsPanel) {
+                this.statsPanel.reset();
+                this.statsPanel.setStatus('running');
+            }
+            
+            // Запускаем контроллер в режиме одного шага
+            if (this.stepController) {
+                this.stepController.start(generatorFactory);
+                this.stepController.pause(); // Сразу ставим на паузу после первого шага
+            }
+        } else {
+            // Делаем один шаг
+            if (this.stepController) {
+                this.stepController.step();
+            }
+        }
     }
 
     /**
@@ -224,6 +502,11 @@ class AlgoGridApp {
     reset() {
         console.log('AlgoGridApp: Reset called');
         if (!this.isInitialized) return;
+        
+        // Останавливаем контроллер
+        if (this.stepController) {
+            this.stepController.reset();
+        }
         
         if (this.grid) {
             this.grid.reset();

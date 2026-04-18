@@ -5,6 +5,7 @@
 
 import { Grid } from '../core/grid.js';
 import { CanvasRenderer } from './canvas-renderer.js';
+import { StepController } from './step-controller.js';
 
 /**
  * Класс для управления элементами UI.
@@ -14,13 +15,17 @@ export class Controls {
      * Создает контроллер управления.
      * @param {Grid} grid - Экземпляр сетки.
      * @param {CanvasRenderer} renderer - Экземпляр рендерера.
+     * @param {StepController} [stepController] - Контроллер выполнения алгоритма.
      */
-    constructor(grid, renderer) {
+    constructor(grid, renderer, stepController = null) {
         /** @type {Grid} */
         this.grid = grid;
         
         /** @type {CanvasRenderer} */
         this.renderer = renderer;
+        
+        /** @type {StepController|null} */
+        this.stepController = stepController;
         
         /** @type {number} - Текущая скорость анимации */
         this.speed = 50;
@@ -125,6 +130,11 @@ export class Controls {
      */
     onPlay() {
         console.log('Controls: onPlay called');
+        
+        // Вызываем callback если есть
+        if (this.onPlayCallback) {
+            this.onPlayCallback();
+        }
     }
 
     /**
@@ -132,6 +142,15 @@ export class Controls {
      */
     onPause() {
         console.log('Controls: onPause called');
+        
+        if (this.stepController) {
+            this.stepController.pause();
+        }
+        
+        // Вызываем callback если есть
+        if (this.onPauseCallback) {
+            this.onPauseCallback();
+        }
     }
 
     /**
@@ -139,6 +158,11 @@ export class Controls {
      */
     onStep() {
         console.log('Controls: onStep called');
+        
+        // Вызываем callback если есть
+        if (this.onStepCallback) {
+            this.onStepCallback();
+        }
     }
 
     /**
@@ -146,6 +170,43 @@ export class Controls {
      */
     onReset() {
         console.log('Controls: onReset called');
+        
+        // Вызываем callback если есть
+        if (this.onResetCallback) {
+            this.onResetCallback();
+        }
+    }
+
+    /**
+     * Устанавливает callback для кнопки Play.
+     * @param {Function} callback - Функция обратного вызова.
+     */
+    setOnPlay(callback) {
+        this.onPlayCallback = callback;
+    }
+
+    /**
+     * Устанавливает callback для кнопки Pause.
+     * @param {Function} callback - Функция обратного вызова.
+     */
+    setOnPause(callback) {
+        this.onPauseCallback = callback;
+    }
+
+    /**
+     * Устанавливает callback для кнопки Step.
+     * @param {Function} callback - Функция обратного вызова.
+     */
+    setOnStep(callback) {
+        this.onStepCallback = callback;
+    }
+
+    /**
+     * Устанавливает callback для кнопки Reset.
+     * @param {Function} callback - Функция обратного вызова.
+     */
+    setOnReset(callback) {
+        this.onResetCallback = callback;
     }
 
     /**
@@ -162,6 +223,19 @@ export class Controls {
      */
     onSpeedChange(speed) {
         console.log('Controls: onSpeedChange', speed);
+        
+        // Обновляем скорость в StepController если есть
+        if (this.stepController) {
+            this.stepController.setSpeed(speed);
+        }
+    }
+
+    /**
+     * Устанавливает StepController.
+     * @param {StepController} stepController - Контроллер выполнения.
+     */
+    setStepController(stepController) {
+        this.stepController = stepController;
     }
 
     /**

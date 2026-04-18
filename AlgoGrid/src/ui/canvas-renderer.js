@@ -380,6 +380,23 @@ export class CanvasRenderer {
 
         return null;
     }
+
+    /**
+     * Подсвечивает путь на canvas.
+     * @param {Cell[]} path - Массив ячеек пути.
+     */
+    highlightPath(path) {
+        if (!path || path.length === 0) {
+            return;
+        }
+
+        // Устанавливаем parent для восстановления пути в _drawPath
+        for (let i = 1; i < path.length; i++) {
+            path[i].parent = path[i - 1];
+        }
+
+        this.scheduleDraw();
+    }
 }
 
 export default CanvasRenderer;
