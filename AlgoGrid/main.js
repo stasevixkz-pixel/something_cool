@@ -8,6 +8,10 @@ import { CanvasRenderer } from './src/ui/canvas-renderer.js';
 import { Controls } from './src/ui/controls.js';
 import { StatsPanel } from './src/ui/stats-panel.js';
 import { StepController } from './src/ui/step-controller.js';
+import { autoLoad, autoSave, loadFromJSON } from './src/io/storage.js';
+import { bfsGenerator } from './src/core/algorithms/bfs.js';
+import { dijkstraGenerator } from './src/core/algorithms/dijkstra.js';
+import { astarGenerator } from './src/core/algorithms/astar.js';
 
 /**
  * Главный класс приложения AlgoGrid.
@@ -66,6 +70,11 @@ class AlgoGridApp {
         this.grid = new Grid(30, 20, 20);
         console.log('AlgoGridApp: Grid created');
         
+        // Автозагрузка из localStorage
+        if (autoLoad(this.grid)) {
+            console.log('AlgoGridApp: Auto-loaded grid from localStorage');
+        }
+        
         // Получаем canvas элемент
         const canvas = document.getElementById('grid');
         if (!canvas) {
@@ -98,9 +107,10 @@ class AlgoGridApp {
         // Настраиваем обработчики мыши
         this.setupMouseHandlers(canvas);
         
-        // Подписываемся на события изменений сетки
+        // Подписываемся на события изменений сетки для автосохранения
         this.grid.addEventListener('grid:change', () => {
             this.renderer.render();
+            autoSave(this.grid);
         });
         
         // Отрисовываем начальное состояние
@@ -175,6 +185,11 @@ class AlgoGridApp {
         this.controls.setOnPause(() => this.pause());
         this.controls.setOnStep(() => this.step());
         this.controls.setOnReset(() => this.reset());
+        
+        // Callback для импорта
+        this.controls.setOnImport((data) => {
+            return loadFromJSON(this.grid, data);
+        });
     }
 
     /**
@@ -308,16 +323,34 @@ class AlgoGridApp {
      * @returns {Function|null} Функция-генератор или null.
      */
     getAlgorithmGenerator(algorithm) {
-        if (!this.grid) return null;
+        if (!this.grid || !this.grid.startCell || !this.grid.endCell) return null;
+        
+        const start = { x: this.grid.startCell.x, y: this.grid.startCell.y };
+        const end = { x: this.grid.endCell.x, y: this.grid.endCell.y };
+        
+        // Преобразуем сетку в формат для алгоритмов (2D массив с isWall)
+        const gridData = [];
+        for (let y = 0; y < this.grid.rows; y++) {
+            gridData[y] = [];
+            for (let x = 0; x < this.grid.cols; x++) {
+                gridData[y][x] = {
+                    isWall: this.grid.cells[y][x].type === 'wall'
+                };
+            }
+        }
         
         switch (algorithm) {
             case 'bfs':
-                return () => this.bfsGenerator();
+                return () => bfsGenerator(gridData, start, end);
             case 'dfs':
                 return () => this.dfsGenerator();
+            case 'dijkstra':
+                return () => dijkstraGenerator(gridData, start, end);
+            case 'astar':
+                return () => astarGenerator(gridData, start, end);
             default:
                 // По умолчанию используем BFS
-                return () => this.bfsGenerator();
+                return () => bfsGenerator(gridData, start, end);
         }
     }
 
