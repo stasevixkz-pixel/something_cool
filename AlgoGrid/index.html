@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlgoGrid - Визуализация алгоритмов поиска пути</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <h1>AlgoGrid</h1>
+            <p class="subtitle">Визуализация алгоритмов поиска пути</p>
+        </header>
+
+        <main class="main-content">
+            <div class="canvas-wrapper">
+                <canvas id="grid"></canvas>
+            </div>
+
+            <aside class="sidebar">
+                <section class="panel control-panel">
+                    <h2>Управление</h2>
+                    <div class="control-group">
+                        <label for="algorithm-select">Алгоритм:</label>
+                        <select id="algorithm-select">
+                            <option value="bfs">BFS (Поиск в ширину)</option>
+                            <option value="dfs">DFS (Поиск в глубину)</option>
+                            <option value="dijkstra">Dijkstra</option>
+                            <option value="astar">A*</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="speed-slider">Скорость:</label>
+                        <input type="range" id="speed-slider" min="1" max="100" value="50">
+                        <span id="speed-value">50</span>
+                    </div>
+
+                    <div class="button-group">
+                        <button id="btn-play" class="btn btn-primary">▶ Play</button>
+                        <button id="btn-pause" class="btn btn-warning">⏸ Pause</button>
+                        <button id="btn-step" class="btn btn-info">⏭ Step</button>
+                        <button id="btn-reset" class="btn btn-danger">↻ Reset</button>
+                    </div>
+                </section>
+
+                <section class="panel stats-panel">
+                    <h2>Статистика</h2>
+                    <div class="stat-item">
+                        <span class="stat-label">Посещено узлов:</span>
+                        <span id="stat-visited" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Длина пути:</span>
+                        <span id="stat-path-length" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Время выполнения:</span>
+                        <span id="stat-time" class="stat-value">0 ms</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Статус:</span>
+                        <span id="stat-status" class="stat-value status-idle">Ожидание</span>
+                    </div>
+                </section>
+            </aside>
+        </main>
+    </div>
+
+    <script type="module" src="src/core/grid.js"></script>
+    <script type="module" src="src/ui/canvas-renderer.js"></script>
+    <script type="module" src="src/ui/controls.js"></script>
+    <script type="module" src="src/ui/stats-panel.js"></script>
+    <script type="module" src="main.js"></script>
+</body>
+</html>
