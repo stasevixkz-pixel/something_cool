@@ -97,10 +97,7 @@ export class StepController extends EventTarget {
             console.log('StepController: Processing action', action);
 
             if (action.type === 'visit') {
-                // Обновляем сетку
-                if (action.cell) {
-                    action.cell.visited = true;
-                }
+                // Обновляем счетчик посещений
                 this.visitedCount++;
 
                 // Вычисляем текущее время
@@ -111,7 +108,9 @@ export class StepController extends EventTarget {
                 // Отправляем событие шага
                 this.dispatchEvent(new CustomEvent('algo:step', {
                     detail: {
-                        cell: action.cell,
+                        x: action.x,
+                        y: action.y,
+                        queueSize: action.queueSize,
                         visitedCount: this.visitedCount,
                         time: this.totalTime
                     }
@@ -134,12 +133,12 @@ export class StepController extends EventTarget {
                 }));
             } else if (action.type === 'error') {
                 // Ошибка
-                console.error('StepController: Algorithm error', action.msg);
+                console.error('StepController: Algorithm error', action.message);
                 this._stop();
 
                 this.dispatchEvent(new CustomEvent('algo:error', {
                     detail: {
-                        msg: action.msg || 'Unknown error'
+                        message: action.message || 'Unknown error'
                     }
                 }));
             }
@@ -150,7 +149,7 @@ export class StepController extends EventTarget {
             this._stop();
             this.dispatchEvent(new CustomEvent('algo:error', {
                 detail: {
-                    msg: error.message || 'Step execution error'
+                    message: error.message || 'Step execution error'
                 }
             }));
             return undefined;

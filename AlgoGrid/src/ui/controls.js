@@ -6,6 +6,7 @@
 import { Grid } from '../core/grid.js';
 import { CanvasRenderer } from './canvas-renderer.js';
 import { StepController } from './step-controller.js';
+import { saveToJSON, importFromString, createExportBlob } from '../io/storage.js';
 
 /**
  * Класс для управления элементами UI.
@@ -36,8 +37,12 @@ export class Controls {
         /** @type {Object|null} - Ссылки на DOM элементы */
         this.elements = null;
         
+        /** @type {HTMLElement|null} - Контейнер для toast уведомлений */
+        this.toastContainer = null;
+        
         this.initializeElements();
         this.attachEventListeners();
+        this.setupKeyboardShortcuts();
     }
 
     /**
@@ -53,8 +58,20 @@ export class Controls {
             algorithmSelect: document.getElementById('algorithm-select'),
             speedSlider: document.getElementById('speed-slider'),
             speedValue: document.getElementById('speed-value'),
-            canvas: document.getElementById('grid')
+            canvas: document.getElementById('grid'),
+            exportButton: document.getElementById('btn-export'),
+            importButton: document.getElementById('btn-import'),
+            importFileInput: document.getElementById('import-file-input')
         };
+        
+        // Создаем контейнер для toast уведомлений если нет
+        this.toastContainer = document.getElementById('toast-container');
+        if (!this.toastContainer) {
+            this.toastContainer = document.createElement('div');
+            this.toastContainer.id = 'toast-container';
+            this.toastContainer.className = 'toast-container';
+            document.body.appendChild(this.toastContainer);
+        }
     }
 
     /**
@@ -88,6 +105,32 @@ export class Controls {
             console.log('Controls: Reset button clicked');
             this.onReset();
         });
+        
+        // Кнопка Экспорт
+        if (this.elements.exportButton) {
+            this.elements.exportButton.addEventListener('click', () => {
+                console.log('Controls: Export button clicked');
+                this.onExport();
+            });
+        }
+        
+        // Кнопка Импорт
+        if (this.elements.importButton) {
+            this.elements.importButton.addEventListener('click', () => {
+                console.log('Controls: Import button clicked');
+                if (this.elements.importFileInput) {
+                    this.elements.importFileInput.click();
+                }
+            });
+        }
+        
+        // Input для импорта файла
+        if (this.elements.importFileInput) {
+            this.elements.importFileInput.addEventListener('change', (event) => {
+                console.log('Controls: File input changed');
+                this.onImportFile(event);
+            });
+        }
         
         // Выбор алгоритма
         this.elements.algorithmSelect.addEventListener('change', (event) => {
@@ -123,6 +166,88 @@ export class Controls {
                 this.onCanvasMouseUp();
             });
         }
+    }
+
+    /**
+     * Настраивает горячие клавиши.
+     */
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (event) => {
+            // Игнорируем если фокус в input/select/textarea
+            const tag = document.activeElement?.tagName?.toLowerCase();
+            if (tag === 'input' || tag === 'select' || tag === 'textarea') {
+                return;
+            }
+            
+            switch (event.code) {
+                case 'Space':
+                    event.preventDefault();
+                    // Play/Pause toggle
+                    if (this.stepController && this.stepController.isRunning()) {
+                        this.onPause();
+                    } else {
+                        this.onPlay();
+                    }
+                    break;
+                    
+                case 'KeyR':
+                    event.preventDefault();
+                    this.onReset();
+                    break;
+                    
+                case 'Digit1':
+                case 'Numpad1':
+                    event.preventDefault();
+                    this.selectAlgorithm('bfs');
+                    break;
+                    
+                case 'Digit2':
+                case 'Numpad2':
+                    event.preventDefault();
+                    this.selectAlgorithm('dfs');
+                    break;
+                    
+                case 'Digit3':
+                case 'Numpad3':
+                    event.preventDefault();
+                    this.selectAlgorithm('dijkstra');
+                    break;
+                    
+                case 'Digit4':
+                case 'Numpad4':
+                    event.preventDefault();
+                    this.selectAlgorithm('astar');
+                    break;
+            }
+        });
+    }
+
+    /**
+     * Выбирает алгоритм программно.
+     * @param {string} algorithm - Название алгоритма.
+     */
+    selectAlgorithm(algorithm) {
+        if (this.elements.algorithmSelect) {
+            this.elements.algorithmSelect.value = algorithm;
+            this.selectedAlgorithm = algorithm;
+            this.onAlgorithmChange(algorithm);
+            this.showToast(`Алгоритм: ${this.getAlgorithmDisplayName(algorithm)}`, 'info');
+        }
+    }
+
+    /**
+     * Получает отображаемое имя алгоритма.
+     * @param {string} algorithm - Название алгоритма.
+     * @returns {string} Отображаемое имя.
+     */
+    getAlgorithmDisplayName(algorithm) {
+        const names = {
+            'bfs': 'BFS (Поиск в ширину)',
+            'dfs': 'DFS (Поиск в глубину)',
+            'dijkstra': 'Dijkstra',
+            'astar': 'A*'
+        };
+        return names[algorithm] || algorithm;
     }
 
     /**
@@ -178,6 +303,114 @@ export class Controls {
     }
 
     /**
+     * Обработчик нажатия кнопки Экспорт.
+     */
+    onExport() {
+        console.log('Controls: onExport called');
+        
+        try {
+            const data = saveToJSON(this.grid);
+            const blobUrl = createExportBlob(data);
+            
+            // Создаем ссылку для скачивания
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = 'algogrid-grid.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Освобождаем URL
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+            
+            this.showToast('Сетка экспортирована успешно!', 'success');
+        } catch (error) {
+            console.error('Export failed:', error);
+            this.showToast('Ошибка экспорта: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Обработчик импорта файла.
+     * @param {Event} event - Событие изменения input.
+     */
+    onImportFile(event) {
+        console.log('Controls: onImportFile called');
+        
+        const file = event.target?.files?.[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const jsonString = e.target?.result;
+                if (typeof jsonString !== 'string') {
+                    throw new Error('Invalid file content');
+                }
+                
+                const data = importFromString(jsonString);
+                if (!data) {
+                    throw new Error('Invalid JSON format');
+                }
+                
+                // Импортируем в grid через callback
+                if (this.onImportCallback) {
+                    const success = this.onImportCallback(data);
+                    if (success) {
+                        this.showToast('Сетка импортирована успешно!', 'success');
+                    } else {
+                        this.showToast('Ошибка импорта: несовместимый формат', 'error');
+                    }
+                }
+            } catch (error) {
+                console.error('Import failed:', error);
+                this.showToast('Ошибка импорта: ' + error.message, 'error');
+            }
+        };
+        
+        reader.onerror = () => {
+            this.showToast('Ошибка чтения файла', 'error');
+        };
+        
+        reader.readAsText(file);
+        
+        // Очищаем input для возможности повторного выбора того же файла
+        if (event.target) {
+            event.target.value = '';
+        }
+    }
+
+    /**
+     * Показывает toast уведомление.
+     * @param {string} message - Сообщение.
+     * @param {'success'|'error'|'info'|'warning'} type - Тип уведомления.
+     */
+    showToast(message, type = 'info') {
+        if (!this.toastContainer) return;
+        
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        
+        this.toastContainer.appendChild(toast);
+        
+        // Анимация появления
+        requestAnimationFrame(() => {
+            toast.classList.add('toast-show');
+        });
+        
+        // Удаляем через 3 секунды
+        setTimeout(() => {
+            toast.classList.remove('toast-show');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
+
+    /**
      * Устанавливает callback для кнопки Play.
      * @param {Function} callback - Функция обратного вызова.
      */
@@ -207,6 +440,14 @@ export class Controls {
      */
     setOnReset(callback) {
         this.onResetCallback = callback;
+    }
+
+    /**
+     * Устанавливает callback для импорта.
+     * @param {Function} callback - Функция обратного вызова, принимающая данные и возвращающая boolean.
+     */
+    setOnImport(callback) {
+        this.onImportCallback = callback;
     }
 
     /**
