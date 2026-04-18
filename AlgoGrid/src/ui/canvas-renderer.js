@@ -120,31 +120,41 @@ export class CanvasRenderer {
 
     /**
      * Отрисовывает одну ячейку.
-     * @param {import('./grid.js').Cell} cell - Ячейка для отрисовки.
+     * @param {import('../core/grid.js').Cell} cell - Ячейка для отрисовки.
      */
     drawCell(cell) {
-        console.log('CanvasRenderer: drawCell');
         if (!this.ctx) return;
         
-        const x = cell.col * this.cellSize;
-        const y = cell.row * this.cellSize;
+        const x = cell.x * this.cellSize;
+        const y = cell.y * this.cellSize;
         
         let color = this.colors.background;
         
-        if (cell.isWall) {
+        // Определяем цвет по типу ячейки
+        if (cell.type === 'wall') {
             color = this.colors.wall;
-        } else if (cell.isStart) {
+        } else if (cell.type === 'start') {
             color = this.colors.start;
-        } else if (cell.isEnd) {
+        } else if (cell.type === 'end') {
             color = this.colors.end;
         } else if (cell.isPath) {
             color = this.colors.path;
-        } else if (cell.isVisited) {
+        } else if (cell.visited) {
             color = this.colors.visited;
         }
         
         this.ctx.fillStyle = color;
         this.ctx.fillRect(x + 1, y + 1, this.cellSize - 2, this.cellSize - 2);
+        
+        // Рисуем маркер для start/end
+        if (cell.type === 'start' || cell.type === 'end') {
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.font = 'bold 12px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            const label = cell.type === 'start' ? 'S' : 'E';
+            this.ctx.fillText(label, x + this.cellSize / 2, y + this.cellSize / 2);
+        }
     }
 
     /**
@@ -166,10 +176,9 @@ export class CanvasRenderer {
     /**
      * Получает координаты ячейки под курсором.
      * @param {MouseEvent} event - Событие мыши.
-     * @returns {{row: number, col: number}|null} Координаты ячейки или null.
+     * @returns {{x: number, y: number}|null} Координаты ячейки или null.
      */
     getCellFromEvent(event) {
-        console.log('CanvasRenderer: getCellFromEvent');
         const rect = this.canvas.getBoundingClientRect();
         const x = event.clientX - rect.left;
         const y = event.clientY - rect.top;
@@ -178,7 +187,7 @@ export class CanvasRenderer {
         const row = Math.floor(y / this.cellSize);
         
         if (row >= 0 && row < this.grid.rows && col >= 0 && col < this.grid.cols) {
-            return { row, col };
+            return { x: col, y: row };
         }
         
         return null;
